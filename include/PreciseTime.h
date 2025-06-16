@@ -1,3 +1,4 @@
+#pragma once
 #include <RTClib.h>
 
 class PreciseTime: public DateTime {
@@ -12,6 +13,15 @@ class PreciseTime: public DateTime {
             @brief Expand time into array of single digits.
         */
         void setTimeArr();
+
+        /*!
+            @brief Copy time from RTC
+        */
         void updateFromRTC(DateTime rtcTime);
 
+
+        /*!
+            @brief Print the time to the Serial monitor
+        */
+       void print();
 };
