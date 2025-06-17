@@ -28,4 +28,5 @@ class MediumGPSPlus: public TinyGPSPlus
         */
         uint32_t unixTime();
         int valid;
+        uint32_t previousUnixTime = 0;
 };
