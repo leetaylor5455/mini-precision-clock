@@ -11,7 +11,7 @@
 #include <Button.h>
 #include <battery_utils.h>
 
-#define MS_BETWEEN_SYNCS 1000*60 // Sync every minute
+#define MS_BETWEEN_SYNCS 1000*60*10 // Sync every 10 minutes
 #define MS_WAIT_GPS 10000 // Try GPS sync for 10 seconds
 #define MS_CALIB_OFFSET -155 // Constant ms offset calibration
 
@@ -57,7 +57,6 @@ void loop()
     unsigned long tSynced;
     unsigned long tSyncingStart;
     unsigned long tNow;
-    unsigned long tReceiveGPS;
     unsigned long tSecChange = millis();
     unsigned long centis = 0;
     uint8_t sec = 0;
