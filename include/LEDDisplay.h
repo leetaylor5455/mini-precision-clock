@@ -30,6 +30,15 @@ class LEDDisplay: public LedControl {
         void showBattery(float voltage, int SOC, int charging);
 
         /*!
+            @brief Show 8 char string on LED display.
+            *	'0','1','2','3','4','5','6','7','8','9','0',
+            *  'A','b','c','d','E','F','H','L','P',
+            *  '.','-','_',' ' 
+            @param word "[word]" of 8 chars
+        */
+        void showWord(char word[8]);
+
+        /*!
             @brief Iterate the intensity index
         */
         void iterateIntensity();

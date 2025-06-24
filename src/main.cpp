@@ -11,12 +11,10 @@
 #include <Button.h>
 #include <battery_utils.h>
 
-// #define MS_BETWEEN_SYNCS 1000*60*60 // Sync every hour
 #define MS_BETWEEN_SYNCS 1000*60 // Sync every minute
 #define MS_WAIT_GPS 10000 // Try GPS sync for 10 seconds
+#define MS_CALIB_OFFSET -155 // Constant ms offset calibration
 
-static const bool core1_disable_systick = true;
-bool core1_separate_stack = true;
 static const int RXPin = 1, TXPin = 0;
 static const int batVPin = 29;
 static const int chargingPin = 24;
@@ -33,7 +31,6 @@ void setup()
 {
     Serial.begin(115200);
 
-    // Override default I2C pins for RTC
     Wire.setSDA(8);
     Wire.setSCL(9);
     Wire.begin();
@@ -41,22 +38,12 @@ void setup()
     batButton.init();
     modButton.init();
 
-    // GP29 is battery voltage divider
     pinMode(batVPin, INPUT);
     pinMode(chargingPin, INPUT);
 
-    // Turn off all digits in LED display
-    for(int i = 0; i < display.getDeviceCount(); i++) 
-    {
-        display.shutdown(i, false); 
-    } 
+    display.shutdown(0, false); // Turn off all digits in display
 
-    while (!rtc.begin()) 
-    {
-        Serial.println("Couldn't find RTC");
-        display.showTime(zeroTime);
-        delay(100);
-    }
+    while (!rtc.begin()) { display.showWord((char*)"HELP    "); }
 }
 
 void setup1() 
@@ -67,9 +54,10 @@ void setup1()
 
 void loop() 
 {
-    unsigned long tSynced; // Force sync on start
+    unsigned long tSynced;
     unsigned long tSyncingStart;
     unsigned long tNow;
+    unsigned long tReceiveGPS;
     unsigned long tSecChange = millis();
     unsigned long centis = 0;
     uint8_t sec = 0;
@@ -82,9 +70,6 @@ void loop()
     uint32_t timerSpentPaused = 0;
 
     uint32_t gpsUnixTime;
-
-    static const int intensities[3] = {1, 5, 15};
-    unsigned int idxIntensity;
 
     if (digitalRead(chargingPin)) { display.idxIntensity = 1; }
     else { display.idxIntensity = 1; } // Optional intensity for when boot on battery power
@@ -131,13 +116,13 @@ void loop()
         if (batButton.event == 1 && !timerMode) 
         {
             batVoltage = voltage(analogRead(batVPin));
-            display.showBattery(batVoltage, SOC(batVoltage), digitalRead(chargingPin));
+            display.showBattery(voltage(analogRead(batVPin)), SOC(batVoltage), digitalRead(chargingPin));
         }
 
         // Double click BAT -> change brightness
         if (batButton.event == 2) { display.iterateIntensity(); }    
 
-        // Click BAT IN TIMER
+        // Click BAT in timer mode
         if (timerMode && batButton.event == 1)
         {
             if (!timerRunning) // Button pressed to start/resume timer
@@ -155,7 +140,7 @@ void loop()
             timerRunning = !timerRunning;
         }
 
-        // Hold BAT in TIMER -> reset timer
+        // Hold BAT in timer mode -> reset timer
         if (timerMode && batButton.event == 3) 
         {
             timerCurrentTime = zeroTime;
@@ -165,7 +150,6 @@ void loop()
         }
 
         syncDue = (tNow - tSynced) > MS_BETWEEN_SYNCS;
-        if (syncDue) { synced = false; }
 
         // GPS sync due after timeout or manual sync
         if (syncDue || modButton.event == 3)
@@ -197,9 +181,10 @@ void loop()
                 rp2040.fifo.clear();
             }
 
-            if (tNow - tSyncingStart > MS_WAIT_GPS) // Timeout sync
+            if (tNow - tSyncingStart > MS_WAIT_GPS) // Timeout sync attempt
             { 
                 syncing = false;
+                synced = false;
                 tSynced = tNow;
             }
         }
@@ -224,15 +209,8 @@ void loop()
             }
             display.showTime(timerCurrentTime);            
         }
-        else // Time / date mode
-        {
-            if (showDate) { display.showDate(preciseTime); }
-            else 
-            { 
-                display.showTime(preciseTime); 
-            }
-        }
-        // Serial.println(PreciseTime(preciseTime.unixtime() - timerStartTime.unixtime()).unixtime());
+        else if (showDate) { display.showDate(preciseTime); }
+        else { display.showTime(preciseTime); }
         // delay(20);
     }
 }
@@ -255,12 +233,13 @@ void loop1()
                 // Don't push if it's the first sync, because it holds old value on first sync
                 if (gps.unixTime() > gps.previousUnixTime && gps.previousUnixTime != 0) 
                 { 
-                    rp2040.fifo.push(gps.unixTime());
+                    delay(1000 + MS_CALIB_OFFSET); // Delay 1s + calibration and send time + 1s
+                    rp2040.fifo.push(gps.unixTime() + 1);
                     gps.previousUnixTime = 0; 
                 }
                 else { gps.previousUnixTime = gps.unixTime(); }
                 
-                gps.printTime();
+                // gps.printTime();
             } 
             else { gps.validate(); }
         }

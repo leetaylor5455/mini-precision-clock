@@ -72,6 +72,15 @@ void LEDDisplay::showBattery(float voltage, int SOC, int charging)
     else { delay(MS_SHOW); }
 }
 
+void LEDDisplay::showWord(char word[8])
+{
+    // if (sizeof(word) > 8) { return; }
+
+    for (int i = 7; i >= 0; i--) {
+        setChar(0, i, word[7-i], false);
+    }
+}
+
 void LEDDisplay::iterateIntensity()
 {
     if (idxIntensity == 2) { idxIntensity = 0; }
