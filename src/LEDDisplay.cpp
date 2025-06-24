@@ -2,7 +2,15 @@
 
 void LEDDisplay::showTime(PreciseTime dateTime) 
 {
-    for (int i = sizeof(dateTime.timeArr) - 1; i >= 0; i--) 
+    int digitEnd = 0;
+    if (!showPreciseTime) // Hide precise display if not synced
+    {
+        setChar(0, 0, '-', false);
+        setChar(0, 1, '-', false);
+        digitEnd = 2;
+    }
+    
+    for (int i = sizeof(dateTime.timeArr) - 1; i >= digitEnd; i--) 
     {
         if (loading)
         {
@@ -19,7 +27,6 @@ void LEDDisplay::showTime(PreciseTime dateTime)
         {
             setDigit(0, i, (byte)dateTime.timeArr[i], DPTime[i]);
         }
-        
     }
 }
 

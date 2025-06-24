@@ -36,6 +36,8 @@ class LEDDisplay: public LedControl {
 
         unsigned int idxIntensity;
         bool loading;
+        bool showPreciseTime;
+
     private:
         int loadingIdx = 0;
         unsigned long tSinceDP;

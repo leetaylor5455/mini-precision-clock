@@ -13,7 +13,7 @@
 
 // #define MS_BETWEEN_SYNCS 1000*60*60 // Sync every hour
 #define MS_BETWEEN_SYNCS 1000*60 // Sync every minute
-#define MS_WAIT_GPS 30000 // Try GPS sync for 30 seconds
+#define MS_WAIT_GPS 10000 // Try GPS sync for 10 seconds
 
 static const bool core1_disable_systick = true;
 bool core1_separate_stack = true;
@@ -21,8 +21,6 @@ static const int RXPin = 1, TXPin = 0;
 static const int batVPin = 29;
 static const int chargingPin = 24;
 static const PreciseTime zeroTime(2000, 1, 1);
-
-// volatile bool fifo_write = false;
 
 RTC_DS3231 rtc;
 MediumGPSPlus gps;
@@ -35,16 +33,10 @@ void setup()
 {
     Serial.begin(115200);
 
-    // while (!Serial);
-
     // Override default I2C pins for RTC
     Wire.setSDA(8);
     Wire.setSCL(9);
     Wire.begin();
-
-    // ss.begin(9600);
-
-    // delay(1000);
 
     batButton.init();
     modButton.init();
@@ -65,19 +57,20 @@ void setup()
         display.showTime(zeroTime);
         delay(100);
     }
-
 }
 
 void setup1() 
 {
     ss.begin(9600);
+    ss.flush();
 }
 
 void loop() 
 {
-    unsigned long tSinceSync;
+    unsigned long tSynced; // Force sync on start
+    unsigned long tSyncingStart;
     unsigned long tNow;
-    unsigned long tSec = millis();
+    unsigned long tSecChange = millis();
     unsigned long centis = 0;
     uint8_t sec = 0;
 
@@ -94,7 +87,7 @@ void loop()
     unsigned int idxIntensity;
 
     if (digitalRead(chargingPin)) { display.idxIntensity = 1; }
-    else { display.idxIntensity = 0; }
+    else { display.idxIntensity = 1; } // Optional intensity for when boot on battery power
 
     float batVoltage;
 
@@ -102,7 +95,11 @@ void loop()
     bool timerMode = false;
     bool timerAlreadyStarted = false;
     bool timerRunning = false;
+    
+    bool syncDue;
     bool syncing = true;
+    bool synced = false;
+    bool firstSync = true;
 
     while (true) 
     {
@@ -114,12 +111,15 @@ void loop()
         if (preciseTime.second() != sec)
         {
             sec = preciseTime.second();
-            tSec = tNow;
+            tSecChange = tNow;
         }
+        
+        display.setIntensity(0, display.idxIntensity);
+        display.loading = syncing;
+        display.showPreciseTime = synced;
 
         batButton.checkEvent();
         modButton.checkEvent();
-        display.setIntensity(0, display.idxIntensity);
 
         // Click MOD -> toggle between date and time view
         if (modButton.event == 1) { showDate = !showDate; }
@@ -164,34 +164,48 @@ void loop()
             timerRunning = false;
         }
 
-        // GPS sync due, or manual sync
-        if (tNow - tSinceSync > MS_BETWEEN_SYNCS || modButton.event == 3) { syncing = true; }
+        syncDue = (tNow - tSynced) > MS_BETWEEN_SYNCS;
+        if (syncDue) { synced = false; }
+
+        // GPS sync due after timeout or manual sync
+        if (syncDue || modButton.event == 3)
+        {
+            if (!syncing) { tSyncingStart = tNow; }
+            syncing = true;
+        }
+
         if (syncing) 
         {
             rp2040.resumeOtherCore();
-            display.loading = true;
 
             if (rp2040.fifo.available() > 0) 
             {
                 gpsUnixTime = rp2040.fifo.pop();
                 
-                // If it's good, sync and send core to sleep
-                if (gpsUnixTime > 0) 
+                if (!firstSync) // Bugs out on first syncs -> janky fix for now
                 {
                     rtc.adjust(DateTime(gpsUnixTime));
                     rp2040.idleOtherCore();
-                    rp2040.fifo.clear();
-                    tSinceSync = millis();
-                    display.loading = false;
+                    tSynced = tNow;
                     syncing = false;
+                    synced = true;
                     gpsUnixTime = 0;
+                    // firstSync = true; // Uncomment to double sync every time
                     // Serial.println("Synced with GPS");
                 }
+                else { firstSync = false; }
+                rp2040.fifo.clear();
+            }
+
+            if (tNow - tSyncingStart > MS_WAIT_GPS) // Timeout sync
+            { 
+                syncing = false;
+                tSynced = tNow;
             }
         }
 
         // Count centiseconds
-        preciseTime.cs = (tNow - tSec) / 10;
+        preciseTime.cs = (tNow - tSecChange) / 10;
         preciseTime.setTimeArr();
         preciseTime.setDateArr();
 
@@ -213,10 +227,13 @@ void loop()
         else // Time / date mode
         {
             if (showDate) { display.showDate(preciseTime); }
-            else { display.showTime(preciseTime); }
+            else 
+            { 
+                display.showTime(preciseTime); 
+            }
         }
         // Serial.println(PreciseTime(preciseTime.unixtime() - timerStartTime.unixtime()).unixtime());
-        delay(20);
+        // delay(20);
     }
 }
 
@@ -225,22 +242,25 @@ void loop1()
     uint8_t sec;
 
     while (ss.available() > 0) 
-    { 
+    {
         if (gps.encode(ss.read())) 
         {
-            if (gps.valid && gps.unixTime() != gps.previousUnixTime) // On valid connection, sync on seconds flip
+            if (gps.valid && gps.unixTime() != gps.previousUnixTime)
             { 
                 sec = gps.time.second();
-                while (gps.encode(ss.read()) && gps.time.second() == sec);
+                while (gps.encode(ss.read()) && gps.time.second() == sec); // Wait for second to flip
 
                 gps.setOffset();
-                // gps.printTime();
-                gps.previousUnixTime = gps.unixTime();
-                rp2040.fifo.push(gps.unixTime());
 
+                // Don't push if it's the first sync, because it holds old value on first sync
+                if (gps.unixTime() > gps.previousUnixTime && gps.previousUnixTime != 0) 
+                { 
+                    rp2040.fifo.push(gps.unixTime());
+                    gps.previousUnixTime = 0; 
+                }
+                else { gps.previousUnixTime = gps.unixTime(); }
+                
                 gps.printTime();
-
-                // return;
             } 
             else { gps.validate(); }
         }
