@@ -1,4 +1,4 @@
-#include <PreciseTime.h>
+#include "PreciseTime.h"
 #include <Arduino.h>
 
 void PreciseTime::updateFromRTC(DateTime now) 
@@ -86,3 +86,5 @@ void PreciseTime::print()
 
     Serial.println();
 }
+
+const PreciseTime zeroTime(2000, 1, 1);

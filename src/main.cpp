@@ -5,41 +5,36 @@
 #include <Wire.h>
 #include "RTClib.h"
 
-#include <MediumGPSPlus.h>
-#include <LedControl.h>
-#include <LEDDisplay.h>
-#include <Button.h>
-#include <battery_utils.h>
+#include "config.h"
+#include "MediumGPSPlus.h"
+#include "LedControl.h"
+#include "LEDDisplay.h"
+#include "Button.h"
+#include "battery_utils.h"
+#include "state_types.h"
 
-#define MS_BETWEEN_SYNCS 1000*60*10 // Sync every 10 minutes
-#define MS_WAIT_GPS 10000 // Try GPS sync for 10 seconds
-#define MS_CALIB_OFFSET -155 // Constant ms offset calibration
-
-static const int RXPin = 1, TXPin = 0;
-static const int batVPin = 29;
-static const int chargingPin = 24;
-static const PreciseTime zeroTime(2000, 1, 1);
+constexpr bool DEBUG = false;
 
 RTC_DS3231 rtc;
 MediumGPSPlus gps;
-SoftwareSerial ss(RXPin, TXPin);
-LEDDisplay display(19, 18, 17, 1);
-Button batButton(14);
-Button modButton(15);
+SoftwareSerial ss(RX_PIN, TX_PIN);
+LEDDisplay display(CLK_PIN, CS_PIN, DIN_PIN, NUM_DEVICES);
+Button batButton(BAT_BUTTON_PIN);
+Button modButton(MOD_BUTTON_PIN);
 
 void setup() 
 {
     Serial.begin(115200);
 
-    Wire.setSDA(8);
-    Wire.setSCL(9);
+    Wire.setSDA(I2C_SDA);
+    Wire.setSCL(I2C_SCL);
     Wire.begin();
 
     batButton.init();
     modButton.init();
 
-    pinMode(batVPin, INPUT);
-    pinMode(chargingPin, INPUT);
+    pinMode(BAT_V_PIN, INPUT);
+    pinMode(CHARGING_PIN, INPUT);
 
     display.shutdown(0, false); // Turn off all digits in display
 
@@ -49,174 +44,154 @@ void setup()
 void setup1() 
 {
     ss.begin(9600);
-    ss.flush();
 }
 
 void loop() 
 {
-    unsigned long tSynced;
-    unsigned long tSyncingStart;
-    unsigned long tNow;
-    unsigned long tSecChange = millis();
-    unsigned long centis = 0;
-    uint8_t sec = 0;
+    uint32_t millisNow;
+    uint32_t millisSecChange = millis();
+    uint8_t currentSec = 0;
 
     DateTime rtcTime;
-    PreciseTime preciseTime;
-    PreciseTime timerStartTime = zeroTime;
-    PreciseTime timerStopTime = zeroTime;
-    PreciseTime timerCurrentTime = zeroTime;
-    uint32_t timerSpentPaused = 0;
+    PreciseTime now;
 
-    uint32_t gpsUnixTime;
+    float batteryVoltage;
 
-    if (digitalRead(chargingPin)) { display.idxIntensity = 1; }
-    else { display.idxIntensity = 1; } // Optional intensity for when boot on battery power
-
-    float batVoltage;
-
-    bool showDate = false;
-    bool timerMode = false;
-    bool timerAlreadyStarted = false;
-    bool timerRunning = false;
-    
-    bool syncDue;
-    bool syncing = true;
-    bool synced = false;
-    bool firstSync = true;
+    ChronoState chronograph;
+    GPSSyncState gpsSync;
+    Mode mode = Mode::TIME;
 
     while (true) 
     {
-        tNow = millis();
+        millisNow = millis();
 
         rtcTime = rtc.now();
-        preciseTime.updateFromRTC(rtcTime);
+        now.updateFromRTC(rtcTime);
 
-        if (preciseTime.second() != sec)
+        // Track milliseconds since seconds changes
+        if (now.second() != currentSec)
         {
-            sec = preciseTime.second();
-            tSecChange = tNow;
+            currentSec = now.second();
+            millisSecChange = millisNow;
         }
         
         display.setIntensity(0, display.idxIntensity);
-        display.loading = syncing;
-        display.showPreciseTime = synced;
+        display.loading = gpsSync.inProgress;
+        display.showPreciseTime = gpsSync.synced;
 
         batButton.checkEvent();
         modButton.checkEvent();
 
-        // Click MOD -> toggle between date and time view
-        if (modButton.event == 1) { showDate = !showDate; }
+        // Click MOD -> toggle between date and time view (do nothing in chronograph)
+        if (modButton.event == CLICK) 
+        {
+            switch (mode)
+            {
+                case Mode::TIME:
+                    mode = Mode::DATE;
+                    break;
+                case Mode::DATE:
+                    mode = Mode::TIME;
+                    break;
+                default:
+                    break;
+            }
+        }
 
         // Double click MOD -> toggle timer mode
-        if (modButton.event == 2) { timerMode = !timerMode; }
+        if (modButton.event == DOUBLE_CLICK) { mode = (mode == Mode::TIME) ? Mode::CHRONO : Mode::TIME; }
 
-        // Click BAT -> read battery status
-        if (batButton.event == 1 && !timerMode) 
+        // Click BAT in time mode -> read battery status
+        if (batButton.event == CLICK && mode != Mode::CHRONO) 
         {
-            batVoltage = voltage(analogRead(batVPin));
-            display.showBattery(voltage(analogRead(batVPin)), SOC(batVoltage), digitalRead(chargingPin));
-        }
+            batteryVoltage = voltage(analogRead(BAT_V_PIN));
+            display.showBattery(batteryVoltage, SOC(batteryVoltage), digitalRead(CHARGING_PIN));
+        } 
 
-        // Double click BAT -> change brightness
-        if (batButton.event == 2) { display.iterateIntensity(); }    
-
-        // Click BAT in timer mode
-        if (timerMode && batButton.event == 1)
+        // Click BAT in chronograph mode
+        if (batButton.event == CLICK && mode == Mode::CHRONO)
         {
-            if (!timerRunning) // Button pressed to start/resume timer
+            // Button pressed to start/resume chronograph
+            if (!chronograph.running)
             {
-                if (!timerAlreadyStarted) // No timer previsously exists, mark start point
-                { 
-                    timerStartTime = preciseTime;
-                    timerAlreadyStarted = true;
-                } 
-                // Time is being resumed, accumulate time spent paused
-                else { timerSpentPaused += (preciseTime.unixtime() - timerStopTime.unixtime()); }
+                // Start chronograph if not already started
+                if (!chronograph.started) { chronograph.start(now); } 
+                // Chrono is being resumed, accumulate time spent paused
+                else { chronograph.spentPaused += (now.unixtime() - chronograph.stopTime.unixtime()); }
             }
             // Button pressed to pause time
-            else { timerStopTime = preciseTime; }
-            timerRunning = !timerRunning;
+            else { chronograph.stopTime = now; }
+
+            chronograph.running = !chronograph.running;
         }
+        
+        if (batButton.event == DOUBLE_CLICK) { display.iterateIntensity(); }   
 
         // Hold BAT in timer mode -> reset timer
-        if (timerMode && batButton.event == 3) 
-        {
-            timerCurrentTime = zeroTime;
-            timerSpentPaused = 0;
-            timerAlreadyStarted = false;
-            timerRunning = false;
-        }
+        if (mode == Mode::CHRONO && batButton.event == HOLD) { chronograph.reset(); }
 
-        syncDue = (tNow - tSynced) > MS_BETWEEN_SYNCS;
+        // Make sync due when enough time elapsed since last sync
+        gpsSync.due = (millisNow - gpsSync.millisLastSynced) > MS_BETWEEN_SYNCS;
 
         // GPS sync due after timeout or manual sync
-        if (syncDue || modButton.event == 3)
+        if (gpsSync.due || modButton.event == HOLD)
         {
-            if (!syncing) { tSyncingStart = tNow; }
-            syncing = true;
+            if (!gpsSync.inProgress) { gpsSync.millisSyncStart = millisNow; }
+            gpsSync.inProgress = true;
         }
 
-        if (syncing) 
+        // Sync RTC with GPS time (core 1)
+        if (gpsSync.inProgress) 
         {
-            rp2040.resumeOtherCore();
+            rp2040.resumeOtherCore(); // Wake up core 1 to get GPS time
 
             if (rp2040.fifo.available() > 0) 
             {
-                gpsUnixTime = rp2040.fifo.pop();
-                
-                if (!firstSync) // Bugs out on first syncs -> janky fix for now
+                gpsSync.gpsUnixTime = rp2040.fifo.pop();
+
+                if (!gpsSync.firstSync) 
                 {
-                    rtc.adjust(DateTime(gpsUnixTime));
+                    rtc.adjust(DateTime(gpsSync.gpsUnixTime));
                     rp2040.idleOtherCore();
-                    tSynced = tNow;
-                    syncing = false;
-                    synced = true;
-                    gpsUnixTime = 0;
-                    // firstSync = true; // Uncomment to double sync every time
-                    // Serial.println("Synced with GPS");
+                    gpsSync.setSynced(millisNow);
                 }
-                else { firstSync = false; }
+                else { gpsSync.firstSync = false; }
+                
                 rp2040.fifo.clear();
             }
 
-            if (tNow - tSyncingStart > MS_WAIT_GPS) // Timeout sync attempt
-            { 
-                syncing = false;
-                synced = false;
-                tSynced = tNow;
-            }
+            // Timeout sync attempt
+            if (millisNow - gpsSync.millisSyncStart > MS_WAIT_GPS) { gpsSync.setUnsynced(millisNow); }
         }
 
         // Count centiseconds
-        preciseTime.cs = (tNow - tSecChange) / 10;
-        preciseTime.setTimeArr();
-        preciseTime.setDateArr();
+        now.cs = (millisNow - millisSecChange) / 10;
+        now.setTimeArr();
+        now.setDateArr();
 
-        if (timerMode)
+        // Display according to current mode
+        switch (mode)
         {
-            if (timerRunning)
-            {
-                timerCurrentTime = PreciseTime(
-                    zeroTime.unixtime()
-                    + preciseTime.unixtime() 
-                    - timerStartTime.unixtime()
-                    - timerSpentPaused
-                );
-                timerCurrentTime.cs = preciseTime.cs;
-                timerCurrentTime.setTimeArr();  
-            }
-            display.showTime(timerCurrentTime);            
+            case Mode::TIME:
+                display.showTime(now);
+                break;
+            case Mode::CHRONO:
+                if (chronograph.running) { chronograph.update(now); }
+                display.showTime(chronograph.currentTime); 
+                break;
+            case Mode::DATE:
+                display.showDate(now);
+                break;
+            default:
+                display.showWord((char*)"HELP    ");
+                break;
         }
-        else if (showDate) { display.showDate(preciseTime); }
-        else { display.showTime(preciseTime); }
-        // delay(20);
     }
 }
 
 void loop1()
 {
-    uint8_t sec;
+    uint8_t currentSec;
 
     while (ss.available() > 0) 
     {
@@ -224,8 +199,8 @@ void loop1()
         {
             if (gps.valid && gps.unixTime() != gps.previousUnixTime)
             { 
-                sec = gps.time.second();
-                while (gps.encode(ss.read()) && gps.time.second() == sec); // Wait for second to flip
+                currentSec = gps.time.second();
+                while (gps.encode(ss.read()) && gps.time.second() == currentSec); // Wait for second to flip
 
                 gps.setOffset();
 
@@ -238,13 +213,17 @@ void loop1()
                 }
                 else { gps.previousUnixTime = gps.unixTime(); }
                 
-                // gps.printTime();
+                #ifdef DEBUG
+                gps.printTime();
+                #endif
             } 
             else { gps.validate(); }
         }
         if (millis() > 5000 && gps.charsProcessed() < 10) 
         {
+            #ifdef DEBUG
             Serial.println(F("No GPS detected: check wiring."));
+            #endif
         }
     }
 }

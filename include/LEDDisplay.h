@@ -43,7 +43,7 @@ class LEDDisplay: public LedControl {
         */
         void iterateIntensity();
 
-        unsigned int idxIntensity;
+        unsigned int idxIntensity = 1;
         bool loading;
         bool showPreciseTime;
 

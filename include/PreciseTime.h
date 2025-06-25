@@ -26,9 +26,10 @@ class PreciseTime: public DateTime {
         */
         void updateFromRTC(DateTime rtcTime);
 
-
         /*!
             @brief Print the time to the Serial monitor
         */
        void print();
 };
+
+extern const PreciseTime zeroTime;
