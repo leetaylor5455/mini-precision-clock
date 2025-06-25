@@ -21,12 +21,11 @@ struct GPSSyncState
     bool inProgress = true;
     bool synced = false;
     bool firstSync = true;
-    uint32_t millisLastSynced;
-    uint32_t millisSyncStart;
+    uint32_t millisAtLastSync;
+    uint32_t millisAtSyncStart;
     uint32_t gpsUnixTime;
 
     void setSynced(uint32_t msNow);
-
     void setUnsynced(uint32_t msNow);
 };
 

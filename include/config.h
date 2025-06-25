@@ -3,7 +3,7 @@
 // Delays
 constexpr uint32_t MS_BETWEEN_SYNCS = 1000UL * 60 * 10; // Sync every 10 minutes
 constexpr uint32_t MS_WAIT_GPS = 10000;                 // Try GPS sync for 10 seconds
-constexpr int MS_CALIB_OFFSET = -155;                   // Constant ms offset calibration
+constexpr uint32_t MS_CALIB_OFFSET = -155;                   // Constant ms offset calibration
 
 // Pins
 constexpr int RX_PIN = 1;

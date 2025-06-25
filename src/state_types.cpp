@@ -28,7 +28,7 @@ void ChronoState::start(PreciseTime now)
 
 void GPSSyncState::setSynced(uint32_t tNow) 
 {
-    millisLastSynced = tNow;
+    millisAtLastSync = tNow;
     inProgress = false;
     synced = true;
     gpsUnixTime = 0;
@@ -38,5 +38,5 @@ void GPSSyncState::setUnsynced(uint32_t tNow)
 {
     inProgress = false;
     synced = false;
-    millisLastSynced = tNow;
+    millisAtLastSync = tNow;
 }

@@ -41,15 +41,12 @@ void setup()
     while (!rtc.begin()) { display.showWord((char*)"HELP    "); }
 }
 
-void setup1() 
-{
-    ss.begin(9600);
-}
+void setup1() { ss.begin(9600); }
 
 void loop() 
 {
     uint32_t millisNow;
-    uint32_t millisSecChange = millis();
+    uint32_t millisAtSecChange = millis();
     uint8_t currentSec = 0;
 
     DateTime rtcTime;
@@ -63,16 +60,16 @@ void loop()
 
     while (true) 
     {
-        millisNow = millis();
-
         rtcTime = rtc.now();
         now.updateFromRTC(rtcTime);
+
+        millisNow = millis();
 
         // Track milliseconds since seconds changes
         if (now.second() != currentSec)
         {
             currentSec = now.second();
-            millisSecChange = millisNow;
+            millisAtSecChange = millisNow;
         }
         
         display.setIntensity(0, display.idxIntensity);
@@ -125,18 +122,19 @@ void loop()
             chronograph.running = !chronograph.running;
         }
         
+        // Double click BAT -> change brightness
         if (batButton.event == DOUBLE_CLICK) { display.iterateIntensity(); }   
 
         // Hold BAT in timer mode -> reset timer
         if (mode == Mode::CHRONO && batButton.event == HOLD) { chronograph.reset(); }
 
         // Make sync due when enough time elapsed since last sync
-        gpsSync.due = (millisNow - gpsSync.millisLastSynced) > MS_BETWEEN_SYNCS;
+        gpsSync.due = (millisNow - gpsSync.millisAtLastSync) > MS_BETWEEN_SYNCS;
 
         // GPS sync due after timeout or manual sync
         if (gpsSync.due || modButton.event == HOLD)
         {
-            if (!gpsSync.inProgress) { gpsSync.millisSyncStart = millisNow; }
+            if (!gpsSync.inProgress) { gpsSync.millisAtSyncStart = millisNow; }
             gpsSync.inProgress = true;
         }
 
@@ -161,11 +159,11 @@ void loop()
             }
 
             // Timeout sync attempt
-            if (millisNow - gpsSync.millisSyncStart > MS_WAIT_GPS) { gpsSync.setUnsynced(millisNow); }
+            if (millisNow - gpsSync.millisAtSyncStart > MS_WAIT_GPS) { gpsSync.setUnsynced(millisNow); }
         }
 
         // Count centiseconds
-        now.cs = (millisNow - millisSecChange) / 10;
+        now.cs = (millisNow - millisAtSecChange) / 10;
         now.setTimeArr();
         now.setDateArr();
 
