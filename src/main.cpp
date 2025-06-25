@@ -65,7 +65,6 @@ void loop()
 
         millisNow = millis();
 
-        // Track milliseconds since seconds changes
         if (now.second() != currentSec)
         {
             currentSec = now.second();
@@ -79,7 +78,6 @@ void loop()
         batButton.checkEvent();
         modButton.checkEvent();
 
-        // Click MOD -> toggle between date and time view (do nothing in chronograph)
         if (modButton.event == CLICK) 
         {
             switch (mode)
@@ -95,50 +93,38 @@ void loop()
             }
         }
 
-        // Double click MOD -> toggle timer mode
         if (modButton.event == DOUBLE_CLICK) { mode = (mode == Mode::TIME) ? Mode::CHRONO : Mode::TIME; }
 
-        // Click BAT in time mode -> read battery status
         if (batButton.event == CLICK && mode != Mode::CHRONO) 
         {
             batteryVoltage = voltage(analogRead(BAT_V_PIN));
             display.showBattery(batteryVoltage, SOC(batteryVoltage), digitalRead(CHARGING_PIN));
         } 
 
-        // Click BAT in chronograph mode
         if (batButton.event == CLICK && mode == Mode::CHRONO)
         {
-            // Button pressed to start/resume chronograph
             if (!chronograph.running)
             {
-                // Start chronograph if not already started
                 if (!chronograph.started) { chronograph.start(now); } 
-                // Chrono is being resumed, accumulate time spent paused
                 else { chronograph.spentPaused += (now.unixtime() - chronograph.stopTime.unixtime()); }
             }
-            // Button pressed to pause time
             else { chronograph.stopTime = now; }
 
             chronograph.running = !chronograph.running;
         }
         
-        // Double click BAT -> change brightness
         if (batButton.event == DOUBLE_CLICK) { display.iterateIntensity(); }   
 
-        // Hold BAT in timer mode -> reset timer
         if (mode == Mode::CHRONO && batButton.event == HOLD) { chronograph.reset(); }
 
-        // Make sync due when enough time elapsed since last sync
         gpsSync.due = (millisNow - gpsSync.millisAtLastSync) > MS_BETWEEN_SYNCS;
 
-        // GPS sync due after timeout or manual sync
         if (gpsSync.due || modButton.event == HOLD)
         {
             if (!gpsSync.inProgress) { gpsSync.millisAtSyncStart = millisNow; }
             gpsSync.inProgress = true;
         }
 
-        // Sync RTC with GPS time (core 1)
         if (gpsSync.inProgress) 
         {
             rp2040.resumeOtherCore(); // Wake up core 1 to get GPS time
@@ -162,12 +148,10 @@ void loop()
             if (millisNow - gpsSync.millisAtSyncStart > MS_WAIT_GPS) { gpsSync.setUnsynced(millisNow); }
         }
 
-        // Count centiseconds
         now.cs = (millisNow - millisAtSecChange) / 10;
         now.setTimeArr();
         now.setDateArr();
 
-        // Display according to current mode
         switch (mode)
         {
             case Mode::TIME:
@@ -205,7 +189,7 @@ void loop1()
                 // Don't push if it's the first sync, because it holds old value on first sync
                 if (gps.unixTime() > gps.previousUnixTime && gps.previousUnixTime != 0) 
                 { 
-                    delay(1000 + MS_CALIB_OFFSET); // Delay 1s + calibration and send time + 1s
+                    delay(1000 + MS_CALIB_OFFSET); // Delay 1s + calibration ms and send time + 1s
                     rp2040.fifo.push(gps.unixTime() + 1);
                     gps.previousUnixTime = 0; 
                 }
