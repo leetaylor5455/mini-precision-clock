@@ -88,6 +88,9 @@ void loop()
                 case Mode::DATE:
                     mode = Mode::TIME;
                     break;
+                case Mode::CHRONO:
+                    chronograph.handleClick(now);
+                    break;
                 default:
                     break;
             }
@@ -95,27 +98,15 @@ void loop()
 
         if (modButton.event == DOUBLE_CLICK) { mode = (mode == Mode::TIME) ? Mode::CHRONO : Mode::TIME; }
 
-        if (batButton.event == CLICK && mode != Mode::CHRONO) 
+        if (batButton.event == CLICK) 
         {
             batteryVoltage = voltage(analogRead(BAT_V_PIN));
             display.showBattery(batteryVoltage, SOC(batteryVoltage), digitalRead(CHARGING_PIN));
-        } 
-
-        if (batButton.event == CLICK && mode == Mode::CHRONO)
-        {
-            if (!chronograph.running)
-            {
-                if (!chronograph.started) { chronograph.start(now); } 
-                else { chronograph.spentPaused += (now.unixtime() - chronograph.stopTime.unixtime()); }
-            }
-            else { chronograph.stopTime = now; }
-
-            chronograph.running = !chronograph.running;
         }
         
         if (batButton.event == DOUBLE_CLICK) { display.iterateIntensity(); }   
 
-        if (mode == Mode::CHRONO && batButton.event == HOLD) { chronograph.reset(); }
+        if (batButton.event == HOLD) { chronograph.reset(); }
 
         gpsSync.due = (millisNow - gpsSync.millisAtLastSync) > MS_BETWEEN_SYNCS;
 

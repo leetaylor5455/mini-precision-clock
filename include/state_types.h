@@ -10,6 +10,7 @@ struct ChronoState
     PreciseTime stopTime = zeroTime;
     PreciseTime currentTime = zeroTime;
 
+    void handleClick(PreciseTime now);
     void start(PreciseTime now);
     void update(PreciseTime now);
     void reset();

@@ -1,5 +1,16 @@
 #include "state_types.h"
 
+void ChronoState::handleClick(PreciseTime now)
+{
+    if (!running)
+    {
+        if (!started) { start(now); } 
+        else { spentPaused += (now.unixtime() - stopTime.unixtime()); }
+    }
+    else { stopTime = now; }
+    running = !running;
+}
+
 void ChronoState::reset()
 {
     started = false;

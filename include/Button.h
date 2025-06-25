@@ -1,10 +1,10 @@
 #pragma once
 #include <Arduino.h>
 
-#define MS_DEBOUNCE 20   // Debounce (press) milliseconds
-#define MS_HOLD 1000     // Hold milliseconds
-#define MS_DCGAP 250     // Double click gap milliseconds
-#define MS_LONGHOLD 3000 // Long hold milliseconds
+constexpr uint32_t MS_DEBOUNCE = 20;   // Debounce (press) milliseconds
+constexpr uint32_t MS_HOLD = 1000;     // Hold milliseconds
+constexpr uint32_t MS_DCGAP = 250;     // Double click gap milliseconds
+constexpr uint32_t MS_LONGHOLD = 3000; // Long hold milliseconds
 
 class Button {
     public:
