@@ -1,6 +1,6 @@
 # Mini GPS Precision Clock
 - A pocket-sized digital clock that automatically syncs with GPS time.
-- Timer function
+- Chronograph function
 - USB-C charging and integrated Li-Po
 
 ![IMG_5733](https://github.com/user-attachments/assets/7919cef1-5622-4ff2-9acb-bd82d692f845)
