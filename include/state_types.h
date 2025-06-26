@@ -10,9 +10,27 @@ struct ChronoState
     PreciseTime stopTime = zeroTime;
     PreciseTime currentTime = zeroTime;
 
+    /*!
+        @brief Handle the chronograph function on button click
+        @param now current precise time
+    */
     void handleClick(PreciseTime now);
+
+    /*!
+        @brief Set the states to start the chronograph
+        @param now current precise time
+    */
     void start(PreciseTime now);
+
+    /*!
+        @brief Update the chronograph time state using the current time
+        @param now current precise time
+    */
     void update(PreciseTime now);
+
+    /*!
+        @brief Reset all the chronograph states
+    */
     void reset();
 };
 
@@ -26,8 +44,22 @@ struct GPSSyncState
     uint32_t millisAtSyncStart;
     uint32_t gpsUnixTime;
 
+    /*!
+        @brief Set states accordingly when sync is due or button pressed
+        @param millisNow current milliseconds
+    */
     void handleSyncDue(uint32_t millisNow);
+
+    /*!
+        @brief Set states accordingly when sync is successful
+        @param millisNow current milliseconds
+    */
     void setSynced(uint32_t millisNow);
+
+    /*!
+        @brief Set states accordingly when sync is unsuccessful
+        @param millisNow current milliseconds
+    */
     void setUnsynced(uint32_t millisNow);
 };
 

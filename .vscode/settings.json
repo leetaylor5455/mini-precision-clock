@@ -1,6 +1,7 @@
 {
     "idf.pythonInstallPath": "C:\\Users\\leeta\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
     "files.associations": {
-        "random": "cpp"
+        "random": "cpp",
+        "future": "cpp"
     }
 }

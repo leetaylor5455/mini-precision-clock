@@ -100,41 +100,4 @@ void loop()
     }
 }
 
-void loop1()
-{
-    uint8_t currentSec;
-
-    while (ss.available() > 0) 
-    {
-        if (gps.encode(ss.read())) 
-        {
-            if (gps.valid && gps.unixTime() != gps.previousUnixTime)
-            { 
-                currentSec = gps.time.second();
-                while (gps.encode(ss.read()) && gps.time.second() == currentSec); // Wait for second to flip
-
-                gps.setOffset();
-
-                // Don't push if it's the first sync, because it holds old value on first sync
-                if (gps.unixTime() > gps.previousUnixTime && gps.previousUnixTime != 0) 
-                { 
-                    delay(1000 + MS_CALIB_OFFSET); // Delay 1s + calibration ms and send time + 1s
-                    rp2040.fifo.push(gps.unixTime() + 1);
-                    gps.previousUnixTime = 0; 
-                }
-                else { gps.previousUnixTime = gps.unixTime(); }
-                
-                #ifdef DEBUG
-                gps.printTime();
-                #endif
-            } 
-            else { gps.validate(); }
-        }
-        if (millis() > 5000 && gps.charsProcessed() < 10) 
-        {
-            #ifdef DEBUG
-            Serial.println(F("No GPS detected: check wiring."));
-            #endif
-        }
-    }
-}
+void loop1() { handleSyncCore1(&ss, &gps); }
