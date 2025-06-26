@@ -11,6 +11,8 @@
 #include "LEDDisplay.h"
 #include "Button.h"
 #include "battery_utils.h"
+#include "button_handle_utils.h"
+#include "sync_utils.h"
 #include "state_types.h"
 
 constexpr bool DEBUG = false;
@@ -46,30 +48,20 @@ void setup1() { ss.begin(9600); }
 void loop() 
 {
     uint32_t millisNow;
-    uint32_t millisAtSecChange = millis();
-    uint8_t currentSec = 0;
-
     DateTime rtcTime;
     PreciseTime now;
 
-    float batteryVoltage;
-
     ChronoState chronograph;
     GPSSyncState gpsSync;
+
     Mode mode = Mode::TIME;
 
     while (true) 
     {
         rtcTime = rtc.now();
         now.updateFromRTC(rtcTime);
-
         millisNow = millis();
-
-        if (now.second() != currentSec)
-        {
-            currentSec = now.second();
-            millisAtSecChange = millisNow;
-        }
+        now.updatePrecise(millisNow);
         
         display.setIntensity(0, display.idxIntensity);
         display.loading = gpsSync.inProgress;
@@ -78,70 +70,16 @@ void loop()
         batButton.checkEvent();
         modButton.checkEvent();
 
-        if (modButton.event == CLICK) 
-        {
-            switch (mode)
-            {
-                case Mode::TIME:
-                    mode = Mode::DATE;
-                    break;
-                case Mode::DATE:
-                    mode = Mode::TIME;
-                    break;
-                case Mode::CHRONO:
-                    chronograph.handleClick(now);
-                    break;
-                default:
-                    break;
-            }
-        }
-
+        if (modButton.event == CLICK) { handleModButtonClick(&mode, &chronograph, now); }
         if (modButton.event == DOUBLE_CLICK) { mode = (mode == Mode::TIME) ? Mode::CHRONO : Mode::TIME; }
+        if (modButton.event == HOLD || gpsSync.due) { gpsSync.handleSyncDue(millisNow); }
 
-        if (batButton.event == CLICK) 
-        {
-            batteryVoltage = voltage(analogRead(BAT_V_PIN));
-            display.showBattery(batteryVoltage, SOC(batteryVoltage), digitalRead(CHARGING_PIN));
-        }
-        
-        if (batButton.event == DOUBLE_CLICK) { display.iterateIntensity(); }   
-
+        if (batButton.event == CLICK) { handleBatButtonClick(display); }
+        if (batButton.event == DOUBLE_CLICK) { display.iterateIntensity(); }
         if (batButton.event == HOLD) { chronograph.reset(); }
 
         gpsSync.due = (millisNow - gpsSync.millisAtLastSync) > MS_BETWEEN_SYNCS;
-
-        if (gpsSync.due || modButton.event == HOLD)
-        {
-            if (!gpsSync.inProgress) { gpsSync.millisAtSyncStart = millisNow; }
-            gpsSync.inProgress = true;
-        }
-
-        if (gpsSync.inProgress) 
-        {
-            rp2040.resumeOtherCore(); // Wake up core 1 to get GPS time
-
-            if (rp2040.fifo.available() > 0) 
-            {
-                gpsSync.gpsUnixTime = rp2040.fifo.pop();
-
-                if (!gpsSync.firstSync) 
-                {
-                    rtc.adjust(DateTime(gpsSync.gpsUnixTime));
-                    rp2040.idleOtherCore();
-                    gpsSync.setSynced(millisNow);
-                }
-                else { gpsSync.firstSync = false; }
-                
-                rp2040.fifo.clear();
-            }
-
-            // Timeout sync attempt
-            if (millisNow - gpsSync.millisAtSyncStart > MS_WAIT_GPS) { gpsSync.setUnsynced(millisNow); }
-        }
-
-        now.cs = (millisNow - millisAtSecChange) / 10;
-        now.setTimeArr();
-        now.setDateArr();
+        if (gpsSync.inProgress) { handleSyncCore0(&rtc, &gpsSync, millisNow); }
 
         switch (mode)
         {

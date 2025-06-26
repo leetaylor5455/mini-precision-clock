@@ -37,6 +37,12 @@ void ChronoState::start(PreciseTime now)
     started = true;
 }
 
+void GPSSyncState::handleSyncDue(uint32_t millisNow)
+{
+    if (!inProgress) { millisAtSyncStart = millisNow; }
+    inProgress = true;
+}
+
 void GPSSyncState::setSynced(uint32_t tNow) 
 {
     millisAtLastSync = tNow;

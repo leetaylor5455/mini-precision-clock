@@ -11,6 +11,20 @@ void PreciseTime::updateFromRTC(DateTime now)
     ss = now.second();
 }   
 
+void PreciseTime::updatePrecise(uint32_t millisNow)
+{
+    if (ss != currentSec)
+    {
+        currentSec = ss;
+        millisAtSecChange = millisNow;
+    }
+
+    cs = (millisNow - millisAtSecChange) / 10;
+    
+    setTimeArr();
+    setDateArr();
+}
+
 void PreciseTime::setTimeArr() 
 {
     // uint8_t tempShortArr[4] = { hh, mm, ss, cs };

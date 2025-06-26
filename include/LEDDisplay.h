@@ -1,3 +1,4 @@
+#pragma once
 #include <LedControl.h>
 #include <TinyGPSPlus.h>
 #include <PreciseTime.h>

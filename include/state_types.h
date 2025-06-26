@@ -26,8 +26,9 @@ struct GPSSyncState
     uint32_t millisAtSyncStart;
     uint32_t gpsUnixTime;
 
-    void setSynced(uint32_t msNow);
-    void setUnsynced(uint32_t msNow);
+    void handleSyncDue(uint32_t millisNow);
+    void setSynced(uint32_t millisNow);
+    void setUnsynced(uint32_t millisNow);
 };
 
 enum class Mode 

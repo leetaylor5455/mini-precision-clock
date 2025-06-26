@@ -1,3 +1,4 @@
+#pragma once
 #define BAT_FULL 4.2f
 #define BAT_EMPT 2.8f
 
