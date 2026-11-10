@@ -58,8 +58,8 @@ void loop()
 
     while (true) 
     {
-        rtcTime = rtc.now();
-        now.updateFromRTC(rtcTime);
+        rtcTime = rtc.now(); // RTC holds UTC
+        now.updateFromRTC(isBST(rtcTime) ? rtcTime + TimeSpan(3600) : rtcTime);
         millisNow = millis();
         now.updatePrecise(millisNow);
         

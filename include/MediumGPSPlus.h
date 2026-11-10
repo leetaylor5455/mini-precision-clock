@@ -1,11 +1,8 @@
 #pragma once
 #include <TinyGPSPlus.h>
 
-class MediumGPSPlus: public TinyGPSPlus 
+class MediumGPSPlus: public TinyGPSPlus
 {
-    private:
-        int offset;
-
     public:
         MediumGPSPlus();
         /*!
@@ -14,17 +11,18 @@ class MediumGPSPlus: public TinyGPSPlus
         void validate();
 
         /*!
-            @brief Calculate daylight savings offset.
+            @brief True if there is a recent position fix, meaning the date
+            (not just the time of day) can be trusted.
         */
-        void setOffset();
-        
+        bool hasFix();
+
         /*!
             @brief Print time to serial monitor.
         */
         void printTime();
         
         /*!
-            @brief Convert time into unix epoch in seconds.
+            @brief Convert time into unix epoch in seconds (UTC).
         */
         uint32_t unixTime();
         int valid;

@@ -1,95 +1,49 @@
 #include <MediumGPSPlus.h>
 
-MediumGPSPlus::MediumGPSPlus() 
+MediumGPSPlus::MediumGPSPlus()
 {
     valid = 0;
-    offset = 0;
 }
 
 void MediumGPSPlus::printTime()
 {
-
-    Serial.print(F("  Date/Time: "));
-
-    if (true) 
-    {
-        Serial.print(date.day());
-        Serial.print(F("/"));
-        Serial.print(date.month());
-        Serial.print(F("/"));
-        Serial.print(date.year());
-        Serial.print(F(" "));
-        if (time.hour() + offset < 10) Serial.print(F("0"));
-        Serial.print(time.hour() + offset);
-        Serial.print(F(":"));
-        if (time.minute() < 10) Serial.print(F("0"));
-        Serial.print(time.minute());
-        Serial.print(F(":"));
-        if (time.second() < 10) Serial.print(F("0"));
-        Serial.print(time.second());
-        Serial.print(F("."));
-        if (time.centisecond() < 10) Serial.print(F("0"));
-        Serial.print(time.centisecond());
-    }
-    else 
-    {
-        Serial.print(F("0/0/0000 00:00:00.00"));
-    }
-
+    Serial.print(F("  Date/Time (UTC): "));
+    Serial.print(date.day());
+    Serial.print(F("/"));
+    Serial.print(date.month());
+    Serial.print(F("/"));
+    Serial.print(date.year());
+    Serial.print(F(" "));
+    if (time.hour() < 10) Serial.print(F("0"));
+    Serial.print(time.hour());
+    Serial.print(F(":"));
+    if (time.minute() < 10) Serial.print(F("0"));
+    Serial.print(time.minute());
+    Serial.print(F(":"));
+    if (time.second() < 10) Serial.print(F("0"));
+    Serial.print(time.second());
+    Serial.print(F("."));
+    if (time.centisecond() < 10) Serial.print(F("0"));
+    Serial.print(time.centisecond());
     Serial.println();
 }
 
-void MediumGPSPlus::validate() 
+void MediumGPSPlus::validate()
 {
     // Date comes through as 2080 prematurely
     // Janky
-    if (date.isValid() && date.year() < 2080) 
-    {
-        // digitalWrite(LED_BUILTIN, HIGH);
-        valid = 1;
-    } 
-    else 
-    {
-        // digitalWrite(LED_BUILTIN, LOW);
-        valid = 0;
-    }
+    valid = (date.isValid() && date.year() < 2080) ? 1 : 0;
 }
 
-void MediumGPSPlus::setOffset() 
+bool MediumGPSPlus::hasFix()
 {
-    if (valid) 
-    {
-        int y = date.year() - 2000;
-        int x = (y + y/4 + 2) % 7; // remainder will identify which day of month
-
-        // ************* Begins on first Sunday of Mar @ 1:00 AM ************
-        if (date.month() == 3 && date.day() == (14 - x) && time.hour() >= 2) 
-        {
-            offset = 1;
-        }
-        if (date.month() == 3 && date.day() > (14 - x) || date.month() > 3) 
-        {
-            offset = 1;
-        }
-        // ************* Ends on last Sunday of Oct @ 2:00 AM ************
-        if (date.month() == 10 && date.day() == (31 - x) && time.hour() >= 2) 
-        {
-            offset = 0;
-        }
-        
-        if (date.month() == 10 && date.day() > (31 - x) || date.month() > 10 || date.month() < 3) 
-        {
-            offset = 0;
-        }
-    } 
-    else 
-    {
-        offset = 0;
-    }
-    
+    // A position fix means the module has decoded the full nav message,
+    // including the week number, so the date can be trusted.
+    // Without one, the time of day is right but the date may be weeks out.
+    return location.isValid() && location.age() < 2000;
 }
 
-uint32_t MediumGPSPlus::unixTime() 
+uint32_t MediumGPSPlus::unixTime()
 {
     int year = date.year();       // e.g. 2025
     int month = date.month();     // 1-12
@@ -98,19 +52,19 @@ uint32_t MediumGPSPlus::unixTime()
     int minute = time.minute();   // 0-59
     int second = time.second();   // 0-59
 
-    // Days since 1970/01/01 using Zeller's Congruence (basic version)
+    // Days since 1970/01/01
     const int days_in_month[] = {31,28,31,30,31,30,31,31,30,31,30,31};
     unsigned long days = 0;
 
-    for (int y = 1970; y < year; y++) 
+    for (int y = 1970; y < year; y++)
     {
         days += (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) ? 366 : 365;
     }
 
-    for (int m = 1; m < month; m++) 
+    for (int m = 1; m < month; m++)
     {
         days += days_in_month[m - 1];
-        if (m == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))) 
+        if (m == 2 && (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)))
         {
             days += 1; // leap year February
         }
@@ -118,9 +72,10 @@ uint32_t MediumGPSPlus::unixTime()
 
     days += day - 1; // current day
 
+    // UTC: daylight savings is applied at display time (see isBST)
     uint32_t totalSeconds =
         days * 86400UL +
-        (hour+offset) * 3600UL +
+        hour * 3600UL +
         minute * 60UL +
         second;
 
